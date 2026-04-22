@@ -1,0 +1,190 @@
+---
+name: dossier
+description: Use when investigating a topic that benefits from a reusable, citation-backed NotebookLM corpus—literature reviews, due diligence, regulatory/legal research, competitive intelligence, long-term personal knowledge queries, or any repeated deep-dive across the same body of material. Not for one-off web search, single-document reads, or code exploration.
+---
+
+# Dossier
+
+Open a topic-scoped NotebookLM corpus (the "dossier"), let Claude orchestrate curation and reasoning, let NotebookLM serve citation-backed answers from within the dossier. The dossier persists—future questions on the same topic reuse it.
+
+## When to use
+
+- Reading 5+ papers/reports on one topic
+- Pre-IPO / pre-deal due diligence on a company or sector
+- Legal, regulatory, or compliance review across document sets
+- Competitive analysis across multiple products/companies
+- Long-term personal knowledge base queries (Obsidian/Readwise exports, meeting archives)
+- Any task where answers must be traceable to source text
+
+## When NOT to use
+
+- One-off questions answerable from general knowledge or single web page — just ask Claude directly
+- Codebase exploration or "jump to definition" — Claude Code's native tools are stronger
+- Real-time / freshly changing information — NotebookLM is static
+- Tiny corpora (< 5k tokens) — fitting in Claude's context is simpler
+- When speed matters over depth — NotebookLM is ~3× slower than direct chat
+
+## Setup (first run in a machine)
+
+Preflight has 4 steps. Only step 1 is read-only and always safe to auto-run. Steps 2–4 have side effects (disk writes, browser popups, skill directory changes) — **ask the user before each one**.
+
+### Step 1 — Detect (auto, read-only)
+
+```bash
+# What CLI form is reachable?
+if command -v notebooklm >/dev/null 2>&1; then
+  NBLM="notebooklm"
+elif python3 -m notebooklm --help >/dev/null 2>&1; then
+  NBLM="python3 -m notebooklm"   # pip-installed but scripts dir not on PATH — common on macOS
+else
+  NBLM=""                        # not installed
+fi
+
+# Does the existing session work?
+if [ -n "$NBLM" ] && $NBLM auth check 2>&1 | grep -q "✓ pass"; then AUTH_OK=1; else AUTH_OK=0; fi
+```
+
+### Step 2 — Install (only if `$NBLM` is empty) — **ASK FIRST**
+
+Tell the user: *"I don't see `notebooklm-py` on this machine. May I install it with `pip install 'notebooklm-py[browser]'` plus Playwright Chromium (~150MB)?"*. Wait for an explicit yes, then:
+
+```bash
+pip install "notebooklm-py[browser]"
+python3 -m playwright install chromium
+NBLM="python3 -m notebooklm"
+```
+
+If the `notebooklm` binary lands outside `$PATH` (typical on macOS where `pip install` writes to `~/Library/Python/<ver>/bin/`), **don't try to patch PATH yourself** — just report it and continue using the `python3 -m notebooklm` form everywhere. It works identically.
+
+### Step 3 — Authenticate (only if `AUTH_OK=0`) — **ASK FIRST, OPENS BROWSER**
+
+`$NBLM login` opens Chrome for Google OAuth. Tell the user it'll pop a browser window before running.
+
+### Step 4 — Install the low-level `notebooklm` skill (once per machine) — **ASK FIRST**
+
+`$NBLM skill install` writes to `~/.claude/skills/notebooklm/` — it gives Claude direct knowledge of the raw CLI commands, which complements this `dossier` skill. Low risk but still a filesystem change; tell the user, then run.
+
+## Three routes — pick one per dossier
+
+Always present the choice to the user before spending time. Default recommendation: **Route B**.
+
+| Route | Best for | Setup time | Claude tokens | Durability |
+|---|---|---|---|---|
+| **A. NotebookLM deep research** | Quick overview, one-shot curiosity | ~5 min | near-zero | ephemeral (dossier stays but is seeded by auto-research) |
+| **B. Claude-curated sources** ⭐ | Noisy topic, long-term reuse, authoritative-source requirement | 15–30 min | moderate (fetching/filtering) | persistent |
+| **C. User-specified sources** | Strict source whitelist (specific authors, databases) | depends on list | moderate | persistent |
+
+### Route A — NotebookLM auto-research
+
+```bash
+$NBLM create "dossier-<topic-slug>"
+$NBLM use <notebook-id>
+$NBLM source add-research "<search query>" --mode deep
+```
+
+NotebookLM's own research agent picks sources, imports them, and indexes. Claude then `ask`s questions. Source quality is opaque — good for exploration, risky for decisions.
+
+### Route B — Claude-curated (recommended default)
+
+**Steps:**
+
+1. Claude searches authoritative sources (e.g. PubMed, Cochrane, ISSN, SEC EDGAR, primary sources for the topic — not random blogs or SEO pages)
+2. Claude drafts a **source shortlist** with a one-line justification per source
+3. **User confirms or edits the list** — never skip this step
+4. Claude imports confirmed sources one by one (source type auto-detected from content):
+   ```bash
+   $NBLM source add "https://..."      # URL
+   $NBLM source add ./paper.pdf        # local file
+   $NBLM source add "pasted text" --title "My note"   # inline text
+   ```
+   All commands use the active dossier (set by `$NBLM use <id>`). Add `-n <id>` to override.
+5. **Verify import quality** (see caveats below), fix any bad imports
+6. Claude starts asking questions with `$NBLM ask --json "..."`
+
+**Import caveats — read before step 4:**
+
+- **Check every import.** Run `$NBLM source list` after a batch. If a title reads `Checking your browser - reCAPTCHA`, `Access denied`, or similar, NotebookLM's backend hit an anti-bot wall. One retry is fine; if still blocked, abandon the direct URL and go to the Jina fallback below — don't loop on retries.
+- **Never batch-parallelize PubMed URLs.** `pubmed.ncbi.nlm.nih.gov` triggers reCAPTCHA extremely reliably under any concurrency, and even a 3-second serial delay isn't enough. Go straight to Jina Reader + DOI for PubMed.
+- **Jina Reader fallback** — when a URL hits anti-bot walls, fetch it via Jina's proxy and ingest as a file:
+  ```bash
+  curl -sL -H "Authorization: Bearer $JINA_API_KEY" \
+    "https://r.jina.ai/<original-url>" -o /tmp/page.md
+  $NBLM source add /tmp/page.md
+  $NBLM source rename <source-id> "Author Year — descriptive title"
+  ```
+  Free tier works for light use; high quota needs a key from <https://jina.ai> (export as `$JINA_API_KEY`, never hardcode).
+- **Prefer DOI over PubMed URL.** `https://doi.org/<doi>` redirects to the publisher. If it's MDPI / BMC / Frontiers / PLOS (open access), you'll get **full text**, which indexes 5–10× more useful content than a PubMed abstract page. Get the DOI from NCBI esummary: `curl "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&id=<PMID>&retmode=json"`.
+- **`--title` only works for inline text.** When adding a file with `source add /path/file.md --title "..."`, the title is silently dropped and the filename becomes the title. Always follow a file import with `$NBLM source rename <id> "..."` to fix.
+
+### Route C — User-specified
+
+User provides the source list (files, URLs, or "only these authors"). Same commands and same caveats as Route B, just skip steps 1–3.
+
+## Working rules
+
+1. **Check for existing dossier first.** Before creating a new one, run `$NBLM list` and scan for a dossier on the same or adjacent topic. Reuse if possible.
+2. **Ask dossier before answering from memory.** Any claim about content inside the corpus goes through `$NBLM ask "..."`. Do not answer from LLM parametric knowledge when the dossier should know.
+3. **Never paste source text into the Claude conversation.** The whole point is to keep bulk material out of Claude's context. If you find yourself about to quote a long PDF, stop — ask the dossier instead.
+4. **Preserve citations, and resolve them.** The text answer contains `[1][2]` markers — those are only meaningful paired with the `references` array from `ask --json`. Always run `$NBLM ask --json ...` and map each citation number to its `source_id` + `cited_text` in the output. Bare `[1]` without resolution is misleading.
+5. **If the dossier can't answer, say "dossier has no coverage" — do not extrapolate.** Listing unanswered questions is more useful than inventing answers.
+6. **Curation is not optional in Route B/C.** Show the user the shortlist before importing. Bad sources poison every future query.
+7. **One dossier per topic.** Don't mix "creatine research" and "Q4 earnings analysis" in one notebook — cross-contamination ruins citation quality.
+8. **Clear conversation when changing subtopic.** `ask` defaults to continuing the last conversation (`is_follow_up=true`). When the user switches from one angle (e.g., safety) to another (e.g., dosage), run `$NBLM clear` first so the new question isn't biased by prior context.
+9. **Honor NotebookLM's "outside the source material" layer.** When the answer contains phrases like "资料范围之外" / "outside the provided sources" / "not in the documents", NotebookLM is signaling speculation vs. sourced fact. Preserve this split in your output: put sourced content under `## Dossier says`, put speculation under `## Not covered by dossier` with an explicit "unverified" flag. Never merge the two.
+
+## Output format
+
+When delivering results to the user, structure as:
+
+```markdown
+## Dossier says
+<facts from $NBLM ask, citations preserved>
+
+## What I did
+<commands run, files written, experiments executed>
+
+## Conclusion
+<your answer to the user's original question>
+
+## Not covered by dossier
+<questions the dossier couldn't answer — flagged for human follow-up>
+```
+
+## Quick command reference
+
+```bash
+$NBLM list                                      # list existing dossiers
+$NBLM create "dossier-<slug>" --json            # new empty dossier, emit id as JSON
+$NBLM use <id>                                  # set active dossier for session
+$NBLM status                                    # show active dossier
+$NBLM auth check                                # verify Google session still valid
+$NBLM source add "https://..."                  # import URL (auto-detected)
+$NBLM source add ./paper.pdf                    # import local file (auto-detected)
+$NBLM source add-research "<query>" --mode deep # Route A auto-import
+$NBLM source list                               # list sources in active dossier
+$NBLM ask --json "<question>"                   # chat with active dossier — ALWAYS use --json to get citation→source mapping
+$NBLM ask --json "..." -n <id>                  # chat with explicit dossier
+$NBLM source delete -y <id>                     # delete source (use -y to skip confirmation)
+$NBLM source delete-by-title "..."              # delete by exact title (errors if multiple match)
+$NBLM generate audio --wait                     # podcast from dossier
+$NBLM generate report --template study_guide    # markdown report
+$NBLM summary                                   # AI-generated overview of dossier
+```
+
+Full CLI reference: `$NBLM --help` or `$NBLM <cmd> --help`.
+
+## Known limitations
+
+- **Unofficial API.** `notebooklm-py` uses reverse-engineered Google endpoints. Commands may break after Google backend changes — reinstall latest version if errors appear.
+- **Session expires.** Re-run `$NBLM login` if calls start returning auth errors.
+- **Route A source quality is opaque.** NotebookLM picks sources via web search; they may include blogs, wikis, or promotional pages. For high-stakes decisions, prefer Route B.
+- **Notebook source cap.** Free tier 50 sources, Pro tier 300. Plan dossier scope accordingly.
+- **Generation commands are slow.** `audio` / `video` take 5–10 min. Always use `--wait` when you need the artifact.
+
+## Red flags — stop and reconsider
+
+- About to paste a whole PDF into the Claude conversation → use `$NBLM source add --file` instead
+- About to answer a factual question about the corpus from memory → use `$NBLM ask` instead
+- Creating a new dossier because you forgot the old one existed → `$NBLM list` first
+- Skipping the shortlist-confirmation step in Route B to "save time" → bad sources will cost 10× more time later
+- Dossier returns an answer without citations → something's wrong, re-check the query or source indexing
