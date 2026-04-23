@@ -80,12 +80,17 @@ Or, if you already cloned elsewhere, symlink it:
 ln -sfn /path/to/dossier ~/.claude/skills/dossier
 ```
 
-### 3. Optional: Jina Reader fallback key
+### 3. Jina Reader key — no setup needed upfront
 
-Some sites (PubMed most notably) aggressively block NotebookLM's backend scraper. The skill falls back to [Jina Reader](https://jina.ai) to fetch them through a LLM-friendly proxy. Free tier works for light use; for heavy use get a key from <https://jina.ai> and export it:
+Some sites (PubMed most notably) aggressively block NotebookLM's backend scraper. When that happens the skill falls back to [Jina Reader](https://jina.ai), an LLM-friendly fetch proxy.
 
-```bash
-export JINA_API_KEY="jina_xxxxxxxx"
+**You don't need to do anything now.** The first time a fetch actually needs Jina, Claude will ask you to paste a key (free from <https://jina.ai>, no credit card) and save it to `~/.config/dossier/config.json` with `chmod 600`. From then on it's automatic — no `export`, no shell config, no key typed in a terminal.
+
+Advanced users who want to preconfigure can either set `$JINA_API_KEY` (env var always wins) or write the config file directly:
+
+```json
+// ~/.config/dossier/config.json
+{ "jina_api_key": "jina_xxxxxxxx" }
 ```
 
 ## Quick start

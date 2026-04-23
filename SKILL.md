@@ -105,20 +105,71 @@ NotebookLM's own research agent picks sources, imports them, and indexes. Claude
 
 - **Check every import.** Run `$NBLM source list` after a batch. If a title reads `Checking your browser - reCAPTCHA`, `Access denied`, or similar, NotebookLM's backend hit an anti-bot wall. One retry is fine; if still blocked, abandon the direct URL and go to the Jina fallback below — don't loop on retries.
 - **Never batch-parallelize PubMed URLs.** `pubmed.ncbi.nlm.nih.gov` triggers reCAPTCHA extremely reliably under any concurrency, and even a 3-second serial delay isn't enough. Go straight to Jina Reader + DOI for PubMed.
-- **Jina Reader fallback** — when a URL hits anti-bot walls, fetch it via Jina's proxy and ingest as a file:
+- **Jina Reader fallback** — when a URL hits anti-bot walls, fetch it via Jina's proxy and ingest as a file. See "Jina key handling" below for how to obtain `$JINA_API_KEY`:
   ```bash
   curl -sL -H "Authorization: Bearer $JINA_API_KEY" \
     "https://r.jina.ai/<original-url>" -o /tmp/page.md
   $NBLM source add /tmp/page.md
   $NBLM source rename <source-id> "Author Year — descriptive title"
   ```
-  Free tier works for light use; high quota needs a key from <https://jina.ai> (export as `$JINA_API_KEY`, never hardcode).
 - **Prefer DOI over PubMed URL.** `https://doi.org/<doi>` redirects to the publisher. If it's MDPI / BMC / Frontiers / PLOS (open access), you'll get **full text**, which indexes 5–10× more useful content than a PubMed abstract page. Get the DOI from NCBI esummary: `curl "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&id=<PMID>&retmode=json"`.
 - **`--title` only works for inline text.** When adding a file with `source add /path/file.md --title "..."`, the title is silently dropped and the filename becomes the title. Always follow a file import with `$NBLM source rename <id> "..."` to fix.
 
 ### Route C — User-specified
 
 User provides the source list (files, URLs, or "only these authors"). Same commands and same caveats as Route B, just skip steps 1–3.
+
+## Jina key handling (on-demand, only when a Jina fallback is actually needed)
+
+Don't ask for a Jina key during preflight — most dossiers never need one. Only when a specific import hits an anti-bot wall and needs `r.jina.ai` does this flow run.
+
+### Step 1 — Resolve the key (auto, read-only)
+
+Try sources in this order; take the first non-empty:
+
+```bash
+CONFIG_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/dossier/config.json"
+JINA_API_KEY="${JINA_API_KEY:-}"    # 1. honor env var if already exported
+if [ -z "$JINA_API_KEY" ] && [ -f "$CONFIG_FILE" ]; then
+  JINA_API_KEY=$(python3 -c "import json; print(json.load(open('$CONFIG_FILE')).get('jina_api_key',''))" 2>/dev/null)
+fi
+export JINA_API_KEY
+```
+
+### Step 2 — If still empty, ask the user (don't save silently)
+
+Say something like:
+
+> "I need to fetch `<URL>` through Jina Reader because NotebookLM's direct fetch hit a reCAPTCHA wall. I don't see a Jina API key saved on this machine. You can get a free one at <https://jina.ai> (no credit card; click the big API key box on the homepage). Paste it in your next reply and I'll save it to `~/.config/dossier/config.json` with `chmod 600` so only you can read it. From then on it's automatic."
+
+### Step 3 — When the user pastes the key, save it
+
+Pass the key through a heredoc, **not argv** (argv ends up in shell history):
+
+```bash
+mkdir -p "${XDG_CONFIG_HOME:-$HOME/.config}/dossier"
+python3 <<'PY'
+import json, os
+p = os.path.expanduser(os.environ.get("XDG_CONFIG_HOME", "~/.config") + "/dossier/config.json")
+p = os.path.expanduser(p)
+existing = {}
+if os.path.exists(p):
+    existing = json.load(open(p))
+existing["jina_api_key"] = """<PASTE-USER-KEY-HERE>"""
+os.makedirs(os.path.dirname(p), exist_ok=True)
+json.dump(existing, open(p, "w"), indent=2)
+os.chmod(p, 0o600)
+print(f"Saved to {p}")
+PY
+```
+
+After saving, do **not** echo the key back. Confirm with just: "Saved to `~/.config/dossier/config.json`. Continuing with the fetch."
+
+### CI/CD / one-off overrides
+
+Setting `JINA_API_KEY` in the environment always wins over the config file. Useful for:
+- CI jobs that inject the key via secrets
+- Testing with a temporary key without overwriting the saved one
 
 ## Working rules
 

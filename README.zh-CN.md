@@ -80,12 +80,17 @@ git clone https://github.com/wangbooth/dossier ~/.claude/skills/dossier
 ln -sfn /path/to/dossier ~/.claude/skills/dossier
 ```
 
-### 3. 可选：Jina Reader 反爬降级 key
+### 3. Jina Reader key —— 现在不用管
 
-某些网站（最典型的是 PubMed）会激进地屏蔽 NotebookLM 的后端抓取。这时 skill 会降级到 [Jina Reader](https://jina.ai) —— 一个为 LLM 友好格式化网页的代理服务。免费额度够轻度使用；大量使用的话去 <https://jina.ai> 申请一个 key 并 export：
+某些网站（最典型的是 PubMed）会激进地屏蔽 NotebookLM 的后端抓取。这时 skill 会降级到 [Jina Reader](https://jina.ai) —— 一个为 LLM 友好格式化网页的代理服务。
 
-```bash
-export JINA_API_KEY="jina_xxxxxxxx"
+**你现在不用做任何事。** 第一次真的需要 Jina 时，Claude 会让你粘贴一个 key（免费，去 <https://jina.ai>，不用信用卡），然后自动帮你存到 `~/.config/dossier/config.json`（`chmod 600`，只有你自己能读）。以后全自动 —— 不用 `export`、不用改 shell 配置、也不用在终端里敲 key。
+
+高级用户想提前配置的话，两种都行：设 `$JINA_API_KEY` 环境变量（环境变量优先级最高），或者直接写配置文件：
+
+```json
+// ~/.config/dossier/config.json
+{ "jina_api_key": "jina_xxxxxxxx" }
 ```
 
 ## 快速开始
