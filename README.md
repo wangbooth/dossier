@@ -73,7 +73,7 @@ python3 -m notebooklm skill install  # installs the low-level `notebooklm` skill
 | Agent | Install |
 |-------|---------|
 | **Claude Code** | `git clone https://github.com/wangbooth/dossier ~/.claude/skills/dossier` |
-| **Codex** | `git clone https://github.com/wangbooth/dossier ~/.agents/skills/dossier` |
+| **Codex CLI** | `git clone https://github.com/wangbooth/dossier ~/.codex/skills/dossier` |
 | **Multi-agent (Open Skills)** | `npx skills add wangbooth/dossier` |
 | **ChatGPT / others** | Check your agent's docs for its skill directory, then `git clone` the repo into it |
 
@@ -82,6 +82,8 @@ If you already have the repo cloned somewhere, symlink instead of re-cloning:
 ```bash
 ln -sfn /path/to/dossier <your-agent-skill-dir>/dossier
 ```
+
+> **Codex `skill-installer` note:** Codex's built-in installer currently has trouble with "root-as-skill" repositories like this one (`SKILL.md` sits at the repo root, not inside a subdirectory), because its `git sparse-checkout` path doesn't handle `--path .` gracefully. The plain `git clone` command above bypasses the installer and works reliably — just point it at `~/.codex/skills/dossier` and restart Codex.
 
 ### 3. Jina Reader key — no setup needed upfront
 

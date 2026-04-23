@@ -73,7 +73,7 @@ python3 -m notebooklm skill install  # 安装底层 `notebooklm` skill
 | Agent | 安装方式 |
 |-------|----------|
 | **Claude Code** | `git clone https://github.com/wangbooth/dossier ~/.claude/skills/dossier` |
-| **Codex** | `git clone https://github.com/wangbooth/dossier ~/.agents/skills/dossier` |
+| **Codex CLI** | `git clone https://github.com/wangbooth/dossier ~/.codex/skills/dossier` |
 | **多 agent 通用（Open Skills）** | `npx skills add wangbooth/dossier` |
 | **ChatGPT / 其他** | 查你 agent 的文档找到 skill 目录，然后把 repo clone 进去 |
 
@@ -82,6 +82,8 @@ python3 -m notebooklm skill install  # 安装底层 `notebooklm` skill
 ```bash
 ln -sfn /path/to/dossier <你的-agent-skill-目录>/dossier
 ```
+
+> **Codex `skill-installer` 注意事项：** Codex 内置的 skill-installer 在装"根目录即 skill"这类仓库时目前会踩坑（`SKILL.md` 在根目录而不是子目录），原因是它的 `git sparse-checkout` 不能很好地处理 `--path .` 这种场景。直接用上表的 `git clone` 命令可以绕开 installer，稳定工作 —— clone 到 `~/.codex/skills/dossier`，然后重启 Codex 即可。
 
 ### 3. Jina Reader key —— 现在不用管
 
