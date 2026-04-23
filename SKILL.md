@@ -67,15 +67,21 @@ If the `notebooklm` binary lands outside `$PATH` (typical on macOS where `pip in
 
 `$NBLM skill install` writes to `~/.claude/skills/notebooklm/` — it gives Claude direct knowledge of the raw CLI commands, which complements this `dossier` skill. Low risk but still a filesystem change; tell the user, then run.
 
-## Three routes — pick one per dossier
+## Routes — pick the right entry point
 
-Always present the choice to the user before spending time. Default recommendation: **Route B**.
+**First branch — does a dossier on this topic already exist?** Run `$NBLM list` before anything else.
 
-| Route | Best for | Setup time | Claude tokens | Durability |
+- **Yes** (same or adjacent topic) → **Route D** (query / top-up / hygiene). Most time on any long-running topic is spent here, not in fresh builds.
+- **No** → pick one of A/B/C below based on source-quality requirements. Default: **Route B**.
+
+Always present the choice to the user before spending time.
+
+| Route | When | Setup time | Claude tokens | Durability |
 |---|---|---|---|---|
-| **A. NotebookLM deep research** | Quick overview, one-shot curiosity | ~5 min | near-zero | ephemeral (dossier stays but is seeded by auto-research) |
+| **A. NotebookLM deep research** | Quick overview, one-shot curiosity | ~5 min | near-zero | ephemeral (dossier stays but seeded by auto-research) |
 | **B. Claude-curated sources** ⭐ | Noisy topic, long-term reuse, authoritative-source requirement | 15–30 min | moderate (fetching/filtering) | persistent |
 | **C. User-specified sources** | Strict source whitelist (specific authors, databases) | depends on list | moderate | persistent |
+| **D. Existing dossier** | Continuing research on a topic that already has a dossier | near-zero | low (mostly Q&A, maybe small top-up) | persistent |
 
 ### Route A — NotebookLM auto-research
 
@@ -121,6 +127,36 @@ NotebookLM's own research agent picks sources, imports them, and indexes. Claude
 ### Route C — User-specified
 
 User provides the source list (files, URLs, or "only these authors"). Same commands and same caveats as Route B, just skip steps 1–3.
+
+### Route D — Existing dossier (query / top-up / hygiene)
+
+Pick this whenever `$NBLM list` shows a dossier on the same or adjacent topic. This is the default path for **continuing** research. It's not a build mode — A/B/C are for filling an empty dossier; D is for everything you do after.
+
+Open the dossier, then branch into one of three sub-paths:
+
+```bash
+$NBLM list                        # find the dossier
+$NBLM use <id>                    # activate it
+$NBLM source list                 # remind yourself what's in here
+```
+
+#### D1. Query only
+
+The dossier already covers the question — you just need an answer. Go straight to Ask, but respect **Working rule 10** (split or `-s`-scope wide questions before they time out).
+
+#### D2. Top-up (incremental source add)
+
+Q&A revealed a specific gap — one angle, a few missing sources. **Do not re-run Route B end-to-end.** Do a mini-curation instead:
+
+1. Name the gap in one sentence (e.g. "no primary source on <X>'s 2024 pricing change")
+2. Propose 1–5 new sources with one-line justifications, **user confirms**
+3. Import with the same hygiene rules as Route B (check titles after add, use Jina/DOI fallback for anti-bot sites, rename files since `--title` is silently dropped on file imports)
+4. `$NBLM source wait <id>` if the next ask is time-sensitive — otherwise NotebookLM may answer before the new source is indexed
+5. Re-ask the gap question. If still unanswered, treat it as a real data problem (no public source exists, dossier source cap hit) rather than a curation problem — don't keep adding sources of diminishing quality
+
+#### D3. Hygiene pass
+
+Symptoms that trigger this: citations point to garbage titles (reCAPTCHA / access-denied), Ask returns "outside source material" for things you know are covered, duplicates after multiple top-up rounds, or the dossier has been idle for weeks. See **Source hygiene (ongoing)** below.
 
 ## Jina key handling (on-demand, only when a Jina fallback is actually needed)
 
@@ -174,9 +210,61 @@ Setting `JINA_API_KEY` in the environment always wins over the config file. Usef
 - CI jobs that inject the key via secrets
 - Testing with a temporary key without overwriting the saved one
 
+## Source hygiene (ongoing)
+
+Route B's "Import caveats" covers hygiene at *import time*. This section covers what to do **after** sources are in, because a dossier degrades over time — accumulated bad imports, URL rot, duplicates from top-up rounds.
+
+### Spot-check what was actually indexed
+
+A clean title in `source list` doesn't guarantee the content was ingested — NotebookLM occasionally indexes just a cookie banner or a single page of a multi-page article. When an Ask answer seems suspiciously thin on a source you added, verify:
+
+```bash
+$NBLM source fulltext <id> | head -100    # first 100 lines of actually-indexed text
+$NBLM source guide <id>                    # AI summary + auto keywords — reveals what NotebookLM "sees"
+```
+
+If `fulltext` is tiny or the guide's keywords are off-topic, the source is effectively bad even if Ask answers look plausible (Ask is just leaning on other sources). Fix it before more Q&A.
+
+### Delete-and-replace bad sources
+
+```bash
+$NBLM source delete -y <id>                 # by id (supports prefix match)
+$NBLM source delete-by-title "Exact Title"  # errors if multiple match
+```
+
+**Always replace, don't just delete** — otherwise future Ask silently loses that angle. Replacement options:
+
+- Refetch via Jina Reader (see Route B caveats) if original hit anti-bot
+- Ingest the DOI / publisher URL instead of PubMed
+- Add an **inline summary note** when no scrapable form exists — books you own offline, paywalled papers, Cloudflare-walled blog posts:
+  ```bash
+  $NBLM source add "<your summary text>" --title "<Author Year — topic> (notes)"
+  ```
+  Tag the title with `(notes)` or `(summary)` so later citations are unambiguous about what's primary vs. paraphrased.
+
+### De-duplicate after top-ups
+
+Top-ups often re-add the same paper via different URLs (PubMed ↔ DOI ↔ arXiv). Run `$NBLM source list` periodically and look for:
+
+- Same author / year / title across different rows
+- An abstract-only version and a full-text version of the same paper — keep full-text, delete abstract
+- Same URL hostname cluster on overlapping topics (often indicates blog-post drift into the corpus)
+
+### Refresh stale URL sources
+
+URL and Drive sources can go stale when the upstream page changes:
+
+```bash
+if $NBLM source stale <id>; then
+  $NBLM source refresh <id>
+fi
+```
+
+Do a refresh pass before a new round of Q&A on a dossier that's been idle for weeks — cheaper than realizing mid-research that answers are from a cached old version.
+
 ## Working rules
 
-1. **Check for existing dossier first.** Before creating a new one, run `$NBLM list` and scan for a dossier on the same or adjacent topic. Reuse if possible.
+1. **Check for existing dossier first.** Before creating a new one, run `$NBLM list` and scan for a dossier on the same or adjacent topic. If found, go to Route D — do not rebuild.
 2. **Ask dossier before answering from memory.** Any claim about content inside the corpus goes through `$NBLM ask "..."`. Do not answer from LLM parametric knowledge when the dossier should know.
 3. **Never paste source text into the Claude conversation.** The whole point is to keep bulk material out of Claude's context. If you find yourself about to quote a long PDF, stop — ask the dossier instead.
 4. **Preserve citations, and resolve them.** The text answer contains `[1][2]` markers — those are only meaningful paired with the `references` array from `ask --json`. Always run `$NBLM ask --json ...` and map each citation number to its `source_id` + `cited_text` in the output. Bare `[1]` without resolution is misleading.
@@ -185,6 +273,8 @@ Setting `JINA_API_KEY` in the environment always wins over the config file. Usef
 7. **One dossier per topic.** Don't mix "creatine research" and "Q4 earnings analysis" in one notebook — cross-contamination ruins citation quality.
 8. **Clear conversation when changing subtopic.** `ask` defaults to continuing the last conversation (`is_follow_up=true`). When the user switches from one angle (e.g., safety) to another (e.g., dosage), run `$NBLM clear` first so the new question isn't biased by prior context.
 9. **Honor NotebookLM's "outside the source material" layer.** When the answer contains phrases like "资料范围之外" / "outside the provided sources" / "not in the documents", NotebookLM is signaling speculation vs. sourced fact. Preserve this split in your output: put sourced content under `## Dossier says`, put speculation under `## Not covered by dossier` with an explicit "unverified" flag. Never merge the two.
+10. **Split wide Asks; don't retry them.** NotebookLM can time out or return shallow answers when one `ask` spans too many sources (observed failures around 9+ sources in practice). When a question naturally crosses many sources, either split by angle (ask 2–3 narrower questions and synthesize) or use `-s <source_id>` (repeatable) to scope each ask to 1–5 sources. Never retry the same wide question more than once — split instead.
+11. **Keep hygiene up to date — don't run on a dirty corpus.** When you spot a bad source mid-session (garbage title, suspiciously short `source fulltext`, duplicate of another source), stop and fix it before continuing. One bad source poisons every Ask that touches it, and hygiene debt compounds over top-up rounds. See **Source hygiene (ongoing)**.
 
 ## Output format
 
@@ -218,6 +308,12 @@ $NBLM source add-research "<query>" --mode deep # Route A auto-import
 $NBLM source list                               # list sources in active dossier
 $NBLM ask --json "<question>"                   # chat with active dossier — ALWAYS use --json to get citation→source mapping
 $NBLM ask --json "..." -n <id>                  # chat with explicit dossier
+$NBLM ask --json "..." -s <src1> -s <src2>      # source-limited ask (repeatable -s) — use to dodge timeouts and force focus
+$NBLM source wait <id>                          # block until a newly-added source finishes indexing
+$NBLM source fulltext <id>                      # dump NotebookLM's indexed text — verify what was actually ingested
+$NBLM source guide <id>                         # AI summary + keywords for a source — quick sanity check
+$NBLM source stale <id>                         # exit 0 if URL/Drive source needs refresh, 1 if fresh (shell-scriptable)
+$NBLM source refresh <id>                       # re-fetch a stale URL/Drive source
 $NBLM source delete -y <id>                     # delete source (use -y to skip confirmation)
 $NBLM source delete-by-title "..."              # delete by exact title (errors if multiple match)
 $NBLM generate audio --wait                     # podcast from dossier
@@ -234,11 +330,15 @@ Full CLI reference: `$NBLM --help` or `$NBLM <cmd> --help`.
 - **Route A source quality is opaque.** NotebookLM picks sources via web search; they may include blogs, wikis, or promotional pages. For high-stakes decisions, prefer Route B.
 - **Notebook source cap.** Free tier 50 sources, Pro tier 300. Plan dossier scope accordingly.
 - **Generation commands are slow.** `audio` / `video` take 5–10 min. Always use `--wait` when you need the artifact.
+- **Single-ask source-count ceiling.** In practice, one `ask` over ~9+ sources frequently times out or returns shallow synthesis. Use `-s` to scope or split the query (see Working rule 10).
 
 ## Red flags — stop and reconsider
 
 - About to paste a whole PDF into the Claude conversation → use `$NBLM source add --file` instead
 - About to answer a factual question about the corpus from memory → use `$NBLM ask` instead
 - Creating a new dossier because you forgot the old one existed → `$NBLM list` first
+- Running Route B/C from scratch when `$NBLM list` already shows a relevant dossier → switch to Route D
 - Skipping the shortlist-confirmation step in Route B to "save time" → bad sources will cost 10× more time later
+- Asking a question that spans 6+ sources without `-s` scoping or splitting → timeout / shallow-answer risk
+- Citations point to a source whose `source fulltext` is 50 lines of cookie banner → hygiene pass before more Q&A
 - Dossier returns an answer without citations → something's wrong, re-check the query or source indexing
