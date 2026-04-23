@@ -1,5 +1,7 @@
 # dossier
 
+[English](README.md) · [中文](README.zh-CN.md)
+
 > A [Claude Code](https://claude.com/claude-code) skill that lets Claude delegate citation-heavy research to [Google NotebookLM](https://notebooklm.google.com/), while keeping the corpus out of Claude's context window.
 
 ## Why
@@ -69,7 +71,7 @@ python3 -m notebooklm skill install  # installs the low-level `notebooklm` skill
 **Claude Code (personal install):**
 
 ```bash
-git clone https://github.com/<you>/dossier ~/.claude/skills/dossier
+git clone https://github.com/wangbooth/dossier ~/.claude/skills/dossier
 ```
 
 Or, if you already cloned elsewhere, symlink it:
@@ -111,7 +113,7 @@ The skill is pure prompt engineering — no code. It's a markdown file that teac
 - When to trigger (description field)
 - How to run the preflight (install check, auth check, PATH fallback)
 - Which of the three routes to propose and how to branch
-- The seven working rules (shortlist confirmation, citation preservation, "outside source" layering, etc.)
+- The nine working rules (shortlist confirmation, citation resolution via `--json`, "outside source" layering, conversation clearing between subtopics, etc.)
 - How to structure the output (`## Dossier says / ## What I did / ## Conclusion / ## Not covered`)
 
 All commands route through the `notebooklm` CLI (from notebooklm-py).
