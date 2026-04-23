@@ -41,7 +41,10 @@ else
 fi
 
 # Does the existing session work?
-if [ -n "$NBLM" ] && $NBLM auth check 2>&1 | grep -q "✓ pass"; then AUTH_OK=1; else AUTH_OK=0; fi
+if [ -n "$NBLM" ] && $NBLM auth check 2>&1 | grep -q "Authentication is valid."; then AUTH_OK=1; else AUTH_OK=0; fi
+# Note: matches the final verdict line — only appears when every sub-check
+# passed. Matching "✓ pass" alone would false-positive when e.g. only
+# "Storage exists" passed but SID/token checks failed.
 ```
 
 ### Step 2 — Install (only if `$NBLM` is empty) — **ASK FIRST**
