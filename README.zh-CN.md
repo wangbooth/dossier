@@ -2,7 +2,7 @@
 
 [English](README.md) · [中文](README.zh-CN.md)
 
-> 一个 [Claude Code](https://claude.com/claude-code) skill —— 让 Claude 把"需要引用的研究工作"委托给 [Google NotebookLM](https://notebooklm.google.com/) 处理，语料不进 Claude 对话窗口。
+> 一个通用 [Skills](https://agentskills.io/) 格式的 skill —— 兼容 [Claude Code](https://claude.com/claude-code)、Codex、ChatGPT 等支持 Skills 的 AI agent。让你的 AI agent 把"需要引用的研究工作"委托给 [Google NotebookLM](https://notebooklm.google.com/) 处理，语料不进 agent 的对话窗口。
 
 ## 为什么要用它
 
@@ -17,7 +17,7 @@
 | 角色 | 谁来做 | 做什么 |
 |------|-------|--------|
 | 📚 语料库 + 检索 | **NotebookLM** | 永久保存你的资料，用 `[1][2]` 引用方式回答问题、引用能回溯到源文本、不外推 |
-| 🧠 编排 | **Claude Code** | 筛选权威源、判断何时委托给 dossier、写代码、跑实验、合成结论 |
+| 🧠 编排 | **AI agent**（Claude Code / Codex / ChatGPT / …）| 筛选权威源、判断何时委托给 dossier、写代码、跑实验、合成结论 |
 | 🎯 决策 | **你** | 确认源清单、判断最终结论 |
 
 结果就是：**一个话题一个可复用的、带引用的语料库**。重复问答只花几美分而不是几美元，每条事实都能追溯到源文本。
@@ -34,7 +34,7 @@
 ## 不适用场景
 
 - 一次性网页查询 → 直接问 Claude
-- 代码库探索 → Claude Code 原生工具更强
+- 代码库探索 → agent 自己的文件工具（Read / Grep 等）更强
 - 实时数据 → NotebookLM 是静态的
 - 小语料（< 5k tokens）→ 直接贴 prompt 里
 - 速度比引用质量更重要 → NotebookLM 比直接对话慢约 3 倍
@@ -68,16 +68,19 @@ python3 -m notebooklm skill install  # 安装底层 `notebooklm` skill
 
 ### 2. 装这个 skill
 
-**Claude Code（个人安装）：**
+`dossier` 遵循 [Skills 格式](https://agentskills.io/specification) —— 带 YAML frontmatter 的 markdown 文件，任何兼容 Skills 的 agent 都能加载。安装路径按你用的 agent 不同：
+
+| Agent | 安装方式 |
+|-------|----------|
+| **Claude Code** | `git clone https://github.com/wangbooth/dossier ~/.claude/skills/dossier` |
+| **Codex** | `git clone https://github.com/wangbooth/dossier ~/.agents/skills/dossier` |
+| **多 agent 通用（Open Skills）** | `npx skills add wangbooth/dossier` |
+| **ChatGPT / 其他** | 查你 agent 的文档找到 skill 目录，然后把 repo clone 进去 |
+
+如果已经 clone 到别处，软链过去即可，不用重复 clone：
 
 ```bash
-git clone https://github.com/wangbooth/dossier ~/.claude/skills/dossier
-```
-
-或者，如果你已经 clone 到别处，软链过去即可：
-
-```bash
-ln -sfn /path/to/dossier ~/.claude/skills/dossier
+ln -sfn /path/to/dossier <你的-agent-skill-目录>/dossier
 ```
 
 ### 3. Jina Reader key —— 现在不用管
@@ -95,7 +98,7 @@ ln -sfn /path/to/dossier ~/.claude/skills/dossier
 
 ## 快速开始
 
-在 Claude Code 里，直接描述你的研究意图：
+在你的 agent 会话里（Claude Code、Codex 等），直接描述你的研究意图：
 
 > "我想研究下长期服用肌酸对肾功能的影响"
 
@@ -113,7 +116,7 @@ Claude 会识别意图、加载 skill、引导你走三路线选择。典型的 
 
 ## 原理
 
-Skill 本身是纯 prompt 工程 —— 没有代码。就是一个 markdown 文件，教 Claude Code：
+Skill 本身是纯 prompt 工程 —— 没有代码。就是一个 [Skills 格式](https://agentskills.io/specification) 的 markdown 文件，教任何兼容 Skills 的 agent：
 
 - 何时触发（靠 description 字段）
 - 怎么跑 preflight（装包检测、认证检测、PATH 回退）

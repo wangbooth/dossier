@@ -2,7 +2,7 @@
 
 [English](README.md) · [中文](README.zh-CN.md)
 
-> A [Claude Code](https://claude.com/claude-code) skill that lets Claude delegate citation-heavy research to [Google NotebookLM](https://notebooklm.google.com/), while keeping the corpus out of Claude's context window.
+> A portable [Skills](https://agentskills.io/)-format skill — works with [Claude Code](https://claude.com/claude-code), Codex, ChatGPT, and other Skills-compatible agents. It lets your AI agent delegate citation-heavy research to [Google NotebookLM](https://notebooklm.google.com/), while keeping the corpus out of the agent's context window.
 
 ## Why
 
@@ -17,7 +17,7 @@ When you ask Claude to "research topic X", three things normally go wrong:
 | Role | Who | What they do |
 |------|-----|--------------|
 | 📚 Corpus + retrieval | **NotebookLM** | Holds your sources forever. Answers questions with `[1][2]` citations that map back to source text, never extrapolating. |
-| 🧠 Orchestration | **Claude Code** | Curates sources, decides when to delegate to the dossier, writes code, runs experiments, synthesizes. |
+| 🧠 Orchestration | **AI agent** (Claude Code / Codex / ChatGPT / …) | Curates sources, decides when to delegate to the dossier, writes code, runs experiments, synthesizes. |
 | 🎯 Decisions | **You** | Confirm the shortlist of sources. Judge the final conclusion. |
 
 The result is a reusable, citation-backed corpus per research topic, where repeat questions cost cents instead of dollars and every factual claim traces back to source text.
@@ -34,7 +34,7 @@ The result is a reusable, citation-backed corpus per research topic, where repea
 ## When NOT to use
 
 - One-off web lookups → use Claude directly
-- Codebase exploration → Claude Code's native tools are stronger
+- Codebase exploration → your agent's native file tools (Read / Grep / etc.) are stronger
 - Real-time data → NotebookLM is static
 - Tiny corpora (< 5k tokens) → just paste into the prompt
 - When latency matters more than citation quality → NotebookLM is ~3× slower than direct chat
@@ -68,16 +68,19 @@ python3 -m notebooklm skill install  # installs the low-level `notebooklm` skill
 
 ### 2. Install this skill
 
-**Claude Code (personal install):**
+`dossier` is in the [Skills format](https://agentskills.io/specification) — a single markdown file with YAML frontmatter that any Skills-compatible agent can load. Install path depends on your agent:
+
+| Agent | Install |
+|-------|---------|
+| **Claude Code** | `git clone https://github.com/wangbooth/dossier ~/.claude/skills/dossier` |
+| **Codex** | `git clone https://github.com/wangbooth/dossier ~/.agents/skills/dossier` |
+| **Multi-agent (Open Skills)** | `npx skills add wangbooth/dossier` |
+| **ChatGPT / others** | Check your agent's docs for its skill directory, then `git clone` the repo into it |
+
+If you already have the repo cloned somewhere, symlink instead of re-cloning:
 
 ```bash
-git clone https://github.com/wangbooth/dossier ~/.claude/skills/dossier
-```
-
-Or, if you already cloned elsewhere, symlink it:
-
-```bash
-ln -sfn /path/to/dossier ~/.claude/skills/dossier
+ln -sfn /path/to/dossier <your-agent-skill-dir>/dossier
 ```
 
 ### 3. Jina Reader key — no setup needed upfront
@@ -95,7 +98,7 @@ Advanced users who want to preconfigure can either set `$JINA_API_KEY` (env var 
 
 ## Quick start
 
-In a Claude Code session, just describe your research:
+In your agent session (Claude Code, Codex, etc.), just describe your research:
 
 > "I want to research whether creatine is safe for the kidneys long-term."
 
@@ -113,7 +116,7 @@ See [examples/creatine-research.md](examples/creatine-research.md) for a real 8-
 
 ## Under the hood
 
-The skill is pure prompt engineering — no code. It's a markdown file that teaches Claude Code:
+The skill is pure prompt engineering — no code. It's a markdown file in the [Skills format](https://agentskills.io/specification) that teaches any compatible agent:
 
 - When to trigger (description field)
 - How to run the preflight (install check, auth check, PATH fallback)

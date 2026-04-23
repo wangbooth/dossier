@@ -19,7 +19,7 @@ Open a topic-scoped NotebookLM corpus (the "dossier"), let Claude orchestrate cu
 ## When NOT to use
 
 - One-off questions answerable from general knowledge or single web page — just ask Claude directly
-- Codebase exploration or "jump to definition" — Claude Code's native tools are stronger
+- Codebase exploration or "jump to definition" — your agent's native file tools (Read/Grep/etc.) are stronger
 - Real-time / freshly changing information — NotebookLM is static
 - Tiny corpora (< 5k tokens) — fitting in Claude's context is simpler
 - When speed matters over depth — NotebookLM is ~3× slower than direct chat
